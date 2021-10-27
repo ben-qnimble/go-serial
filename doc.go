@@ -84,7 +84,7 @@ cable or a microcontroller development board) is possible to retrieve
 the USB metadata, like VID/PID or USB Serial Number, with the
 GetDetailedPortsList function in the enumerator package:
 
-	import "go.bug.st/serial/enumerator"
+	import "github.com/ben-qnimble/go-serial/enumerator"
 
 	ports, err := enumerator.GetDetailedPortsList()
 	if err != nil {
