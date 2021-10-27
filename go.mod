@@ -1,4 +1,4 @@
-module github.com/ben-qnimble.com/go-serial
+module github.com/ben-qnimble/go-serial
 
 go 1.16
 
