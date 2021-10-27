@@ -1,4 +1,4 @@
-module go.bug.st/serial
+module github.com/ben-qnimble/go-serial/v1.3.4
 
 go 1.13
 
