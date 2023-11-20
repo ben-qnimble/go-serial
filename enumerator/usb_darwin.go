@@ -74,6 +74,10 @@ func extractPortInfo(service io_registry_entry_t) (*PortDetails, error) {
 		//manufacturer, _ := usbDevice.GetStringProperty("USB Vendor Name")
 		//fmt.Println(product + " - " + manufacturer)
 
+		//Extract interface number from last digit of the name, since that is how it is store on the mac
+		Slen := len(port.Name)
+		port.MI = fmt.Sprintf("%02v",int(port.Name[Slen-1]) - int('0') - 1)
+		//fmt.Printf("Name: %s, last is %s and try %d -> %d\n",port.Name,port.Name[Slen-1],5+int(port.Name[Slen-1]),port.MI)
 		port.IsUSB = true
 		port.VID = fmt.Sprintf("%04X", vid)
 		port.PID = fmt.Sprintf("%04X", pid)
