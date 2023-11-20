@@ -1,5 +1,5 @@
 //
-// Copyright 2014-2021 Cristian Maglie. All rights reserved.
+// Copyright 2014-2023 Cristian Maglie. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 //
@@ -26,6 +26,9 @@ type Port interface {
 	// Returns the number of bytes written.
 	Write(p []byte) (n int, err error)
 
+	// Wait until all data in the buffer are sent
+	Drain() error
+
 	// ResetInputBuffer Purges port read buffer
 	ResetInputBuffer() error
 
@@ -48,12 +51,15 @@ type Port interface {
 
 	// Close the serial port
 	Close() error
+
+	// Break sends a break for a determined time
+	Break(time.Duration) error
 }
 
 // NoTimeout should be used as a parameter to SetReadTimeout to disable timeout.
 var NoTimeout time.Duration = -1
 
-// ModemStatusBits contains all the modem status bits for a serial port (CTS, DSR, etc...).
+// ModemStatusBits contains all the modem input status bits for a serial port (CTS, DSR, etc...).
 // It can be retrieved with the Port.GetModemStatusBits() method.
 type ModemStatusBits struct {
 	CTS bool // ClearToSend status
@@ -62,9 +68,25 @@ type ModemStatusBits struct {
 	DCD bool // DataCarrierDetect status
 }
 
+// ModemOutputBits contains all the modem output bits for a serial port.
+// This is used in the Mode.InitialStatusBits struct to specify the initial status of the bits.
+// Note: Linux and MacOSX (and basically all unix-based systems) can not set the status bits
+// before opening the port, even if the initial state of the bit is set to false they will go
+// anyway to true for a few milliseconds, resulting in a small pulse.
+type ModemOutputBits struct {
+	RTS bool // ReadyToSend status
+	DTR bool // DataTerminalReady status
+}
+
 // Open opens the serial port using the specified modes
 func Open(portName string, mode *Mode) (Port, error) {
-	return nativeOpen(portName, mode)
+	port, err := nativeOpen(portName, mode)
+	if err != nil {
+		// Return a nil interface, for which var==nil is true (instead of
+		// a nil pointer to a struct that satisfies the interface).
+		return nil, err
+	}
+	return port, err
 }
 
 // GetPortsList retrieve the list of available serial ports
@@ -74,10 +96,11 @@ func GetPortsList() ([]string, error) {
 
 // Mode describes a serial port configuration.
 type Mode struct {
-	BaudRate int      // The serial port bitrate (aka Baudrate)
-	DataBits int      // Size of the character (must be 5, 6, 7 or 8)
-	Parity   Parity   // Parity (see Parity type for more info)
-	StopBits StopBits // Stop bits (see StopBits type for more info)
+	BaudRate          int              // The serial port bitrate (aka Baudrate)
+	DataBits          int              // Size of the character (must be 5, 6, 7 or 8)
+	Parity            Parity           // Parity (see Parity type for more info)
+	StopBits          StopBits         // Stop bits (see StopBits type for more info)
+	InitialStatusBits *ModemOutputBits // Initial output modem bits status (if nil defaults to DTR=true and RTS=true)
 }
 
 // Parity describes a serial port parity setting

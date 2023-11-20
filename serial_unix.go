@@ -1,10 +1,10 @@
 //
-// Copyright 2014-2021 Cristian Maglie. All rights reserved.
+// Copyright 2014-2023 Cristian Maglie. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 //
 
-// +build linux darwin freebsd openbsd
+//go:build linux || darwin || freebsd || openbsd
 
 package serial
 
@@ -72,7 +72,11 @@ func (port *unixPort) Read(p []byte) (int, error) {
 	for {
 		timeout := time.Duration(-1)
 		if port.readTimeout != NoTimeout {
-			timeout = deadline.Sub(time.Now())
+			timeout = time.Until(deadline)
+			if timeout < 0 {
+				// a negative timeout means "no-timeout" in Select(...)
+				timeout = 0
+			}
 		}
 		res, err := unixutils.Select(fds, nil, fds, timeout)
 		if err == unix.EINTR {
@@ -113,12 +117,18 @@ func (port *unixPort) Write(p []byte) (n int, err error) {
 	return
 }
 
-func (port *unixPort) ResetInputBuffer() error {
-	return unix.IoctlSetInt(port.handle, ioctlTcflsh, unix.TCIFLUSH)
-}
+func (port *unixPort) Break(t time.Duration) error {
+	if err := unix.IoctlSetInt(port.handle, ioctlTiocsbrk, 0); err != nil {
+		return err
+	}
 
-func (port *unixPort) ResetOutputBuffer() error {
-	return unix.IoctlSetInt(port.handle, ioctlTcflsh, unix.TCOFLUSH)
+	time.Sleep(t)
+
+	if err := unix.IoctlSetInt(port.handle, ioctlTioccbrk, 0); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (port *unixPort) SetMode(mode *Mode) error {
@@ -236,6 +246,26 @@ func nativeOpen(portName string, mode *Mode) (*unixPort, error) {
 		return nil, &PortError{code: InvalidSerialPort}
 	}
 
+	if mode.InitialStatusBits != nil {
+		status, err := port.getModemBitsStatus()
+		if err != nil {
+			return nil, &PortError{code: InvalidSerialPort, causedBy: err}
+		}
+		if mode.InitialStatusBits.DTR {
+			status |= unix.TIOCM_DTR
+		} else {
+			status &^= unix.TIOCM_DTR
+		}
+		if mode.InitialStatusBits.RTS {
+			status |= unix.TIOCM_RTS
+		} else {
+			status &^= unix.TIOCM_RTS
+		}
+		if err := port.setModemBitsStatus(status); err != nil {
+			return nil, &PortError{code: InvalidSerialPort, causedBy: err}
+		}
+	}
+
 	// MacOSX require that this operation is the last one otherwise an
 	// 'Invalid serial port' error is returned... don't know why...
 	if port.SetMode(mode) != nil {
@@ -265,6 +295,10 @@ func nativeGetPortsList() ([]string, error) {
 	}
 
 	ports := make([]string, 0, len(files))
+	regex, err := regexp.Compile(regexFilter)
+	if err != nil {
+		return nil, err
+	}
 	for _, f := range files {
 		// Skip folders
 		if f.IsDir() {
@@ -272,24 +306,17 @@ func nativeGetPortsList() ([]string, error) {
 		}
 
 		// Keep only devices with the correct name
-		match, err := regexp.MatchString(regexFilter, f.Name())
-		if err != nil {
-			return nil, err
-		}
-		if !match {
+		if !regex.MatchString(f.Name()) {
 			continue
 		}
 
 		portName := devFolder + "/" + f.Name()
 
-		// Check if serial port is real or is a placeholder serial port "ttySxx"
-		if strings.HasPrefix(f.Name(), "ttyS") {
+		// Check if serial port is real or is a placeholder serial port "ttySxx" or "ttyHSxx"
+		if strings.HasPrefix(f.Name(), "ttyS") || strings.HasPrefix(f.Name(), "ttyHS") {
 			port, err := nativeOpen(portName, &Mode{})
 			if err != nil {
-				serr, ok := err.(*PortError)
-				if ok && serr.Code() == InvalidSerialPort {
-					continue
-				}
+				continue
 			} else {
 				port.Close()
 			}

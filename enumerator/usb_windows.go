@@ -1,5 +1,5 @@
 //
-// Copyright 2014-2021 Cristian Maglie. All rights reserved.
+// Copyright 2014-2023 Cristian Maglie. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 //
@@ -356,10 +356,12 @@ func retrievePortDetailsFromDevInfo(device *deviceInfo, details *PortDetails) er
 		the result of spdrpFriendlyName is therefore unique and suitable as an alternative string to for a port choice */
 	n := uint32(0)
 	setupDiGetDeviceRegistryProperty(device.set, &device.data, spdrpFriendlyName /* spdrpDeviceDesc */, nil, nil, 0, &n)
-	buff := make([]uint16, n*2)
-	buffP := (*byte)(unsafe.Pointer(&buff[0]))
-	if setupDiGetDeviceRegistryProperty(device.set, &device.data, spdrpFriendlyName /* spdrpDeviceDesc */, nil, buffP, n, &n) {
-		details.Product = syscall.UTF16ToString(buff[:])
+	if n > 0 {
+		buff := make([]uint16, n*2)
+		buffP := (*byte)(unsafe.Pointer(&buff[0]))
+		if setupDiGetDeviceRegistryProperty(device.set, &device.data, spdrpFriendlyName /* spdrpDeviceDesc */, nil, buffP, n, &n) {
+			details.Product = syscall.UTF16ToString(buff[:])
+		}
 	}
 
 	return nil
