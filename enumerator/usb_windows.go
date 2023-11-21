@@ -18,12 +18,12 @@ import (
 func parseDeviceID(deviceID string, details *PortDetails) {
 	// Windows stock USB-CDC driver
 	if len(deviceID) >= 3 && deviceID[:3] == "USB" {
+		details.IsUSB = true
 		re := regexp.MustCompile("VID_(....)&PID_(....)(?:&MI_(..)){0,1}(\\\\(\\w+)$)?").FindAllStringSubmatch(deviceID, -1)
 		if re == nil || len(re[0]) < 3 {
 			// Silently ignore unparsable strings
 			return
 		}
-		details.IsUSB = true
 		details.VID = re[0][1]
 		details.PID = re[0][2]
 		if len(re[0]) > 4 {
